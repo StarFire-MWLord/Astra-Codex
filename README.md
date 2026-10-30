@@ -1,21 +1,21 @@
 # Astra-Codex
 
 **Local Codex-style AI coding agent for Windows.**  
-Fully uncensored. Zero built-in refusals. Ships with a default **abliterated** coding model. Tuned for **RTX 4060 (8 GB)**.
+Fully uncensored. Zero built-in refusals. Ships with a strong default **abliterated** model. Tuned for **RTX 4060 (8 GB)**.
 
 > I can deliver anything — you just need the right talons for it.
 
-## Built-in model (zero refusal)
+## Built-in model (smarter default)
 
 On first launch the app automatically downloads and loads:
 
-**Qwen2.5-Coder-7B-Instruct-abliterated (Q4_K_M)**  
-~4.7 GB · fits RTX 4060 8 GB with room for context  
-Source: `bartowski/Qwen2.5-Coder-7B-Instruct-abliterated-GGUF`
+**Huihui-Qwen3.5-9B-abliterated (Q4_K_M)**  
+~5.6 GB · comfortable on RTX 4060 8 GB  
+Source: `mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF`
 
-Abliteration removes the refusal direction from the weights. Combined with the default system prompt in `prompts/default_system.md`, the agent does not refuse, moralize, or soft-block. Open the EXE → model loads → talk.
+This is a step up from the previous 7B default: better reasoning, better instruction following, still fully abliterated (refusal direction removed). Good fit for C++ work, reverse-engineering style tasks, Frida scripts, mod menus, and agent-style coding.
 
-You can still swap any other GGUF into `models/` later.
+You can still drop any other GGUF into `models/` later.
 
 ## What it is
 
@@ -60,7 +60,7 @@ pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-c
 python main.py
 ```
 
-First launch downloads the default abliterated model (~4.7 GB) then opens the UI and loads it automatically.
+First launch downloads the default abliterated model (~5.6 GB) then opens the UI and loads it automatically.
 
 ### 4. Build EXE
 ```powershell
@@ -84,7 +84,7 @@ The app never filters or rewrites model output. Whatever the abliterated weights
 Astra-Codex/
 ├── main.py                      # Bootstraps default model, launches UI
 ├── core/
-│   ├── model_bootstrap.py       # First-run download of abliterated coder
+│   ├── model_bootstrap.py       # First-run download of abliterated model
 │   ├── llm.py                   # llama.cpp wrapper (GPU)
 │   ├── agent.py                 # Tool-calling loop
 │   ├── tools.py                 # File / shell / search
