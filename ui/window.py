@@ -85,6 +85,22 @@ class AstraWindow(ctk.CTk):
             font=ctk.CTkFont(size=11),
         ).pack(padx=12, pady=(2, 8), anchor="w")
 
+        # --- Access level ---
+        ctk.CTkLabel(side, text="Access Level").pack(pady=(12, 2), padx=12, anchor="w")
+        self.access_var = ctk.StringVar(value="medium")
+        for label, val in [
+            ("Full (auto everything)", "full"),
+            ("Medium (approve high-risk)", "medium"),
+            ("Low (approve medium+high)", "low"),
+        ]:
+            ctk.CTkRadioButton(
+                side,
+                text=label,
+                variable=self.access_var,
+                value=val,
+                command=self._on_access_change,
+            ).pack(anchor="w", padx=16, pady=1)
+
         # --- Any GGUF fallback ---
         ctk.CTkLabel(side, text="Or any GGUF in models/").pack(pady=(8, 2), padx=12, anchor="w")
         self.model_var = ctk.StringVar(value="(no models)")
@@ -147,6 +163,47 @@ class AstraWindow(ctk.CTk):
         self.input.bind("<Control-Return>", lambda e: self._send())
 
         ctk.CTkButton(bottom, text="Send", width=100, command=self._send).grid(row=0, column=1)
+
+    def _on_access_change(self):
+        if self.agent:
+            self.agent.set_access(self.access_var.get())
+
+    def _request_approval(self, tool_name: str, args: dict, risk: str) -> bool:
+        """Blocking modal on main thread via after + wait."""
+        result = [False]
+        event = threading.Event()
+
+        def show():
+            dialog = ctk.CTkToplevel(self)
+            dialog.title(f"Approve {risk.upper()} action?")
+            dialog.geometry("520x280")
+            dialog.attributes("-topmost", True)
+            ctk.CTkLabel(
+                dialog,
+                text=f"Tool: {tool_name}\nRisk: {risk}\nAccess: {self.access_var.get()}\n\nArgs:\n{str(args)[:400]}",
+                justify="left",
+                wraplength=480,
+            ).pack(pady=16, padx=16)
+
+            def yes():
+                result[0] = True
+                dialog.destroy()
+                event.set()
+
+            def no():
+                result[0] = False
+                dialog.destroy()
+                event.set()
+
+            btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+            btn_frame.pack(pady=10)
+            ctk.CTkButton(btn_frame, text="Approve", command=yes, fg_color="green").pack(side="left", padx=12)
+            ctk.CTkButton(btn_frame, text="Deny", command=no, fg_color="red").pack(side="left", padx=12)
+            dialog.protocol("WM_DELETE_WINDOW", no)
+
+        self.after(0, show)
+        event.wait(timeout=300)
+        return result[0]
 
     # ------------------------------------------------------------------
     # Model loading / switching
@@ -223,7 +280,13 @@ class AstraWindow(ctk.CTk):
                 llm = LocalLLM(path, n_ctx=8192, n_gpu_layers=n_gpu)
                 sys_prompt = self.prompt_loader.load(self.prompt_var.get())
                 tools = ToolBelt(self.project_root)
-                agent = Agent(llm, tools, sys_prompt)
+                agent = Agent(
+                    llm,
+                    tools,
+                    sys_prompt,
+                    access_level=self.access_var.get(),
+                    approval_callback=self._request_approval,
+                )
 
                 # Restore conversation memory
                 if old_history:

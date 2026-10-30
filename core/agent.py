@@ -25,6 +25,31 @@ After the tool result is returned to you, continue the task. Do not invent tool 
 """
 
 
+def classify_risk(tool_name: str, args: dict) -> str:
+    """high = shell / delete / large overwrite; medium = any write; low = read/search"""
+    name = (tool_name or "").lower()
+    if name in ("run_shell", "shell", "execute", "delete", "rm"):
+        return "high"
+    if name in ("write_file", "edit_file", "apply_patch"):
+        content = str(args.get("content", ""))
+        if len(content) > 2000:
+            return "high"
+        return "medium"
+    if name in ("mkdir", "create_dir"):
+        return "medium"
+    return "low"
+
+
+def needs_approval(access_level: str, risk: str) -> bool:
+    level = (access_level or "medium").lower()
+    if level == "full":
+        return False
+    if level == "medium":
+        return risk == "high"
+    # low
+    return risk in ("medium", "high")
+
+
 class Agent:
     def __init__(
         self,
@@ -32,12 +57,19 @@ class Agent:
         tools: ToolBelt,
         system_prompt: str,
         max_tool_rounds: int = 8,
+        access_level: str = "medium",
+        approval_callback: Optional[Callable[[str, dict, str], bool]] = None,
     ):
         self.llm = llm
         self.tools = tools
         self.system = system_prompt.strip() + "\n\n" + TOOL_INSTRUCTION
         self.max_tool_rounds = max_tool_rounds
+        self.access_level = access_level
+        self.approval_callback = approval_callback
         self.history: list[dict] = [{"role": "system", "content": self.system}]
+
+    def set_access(self, level: str):
+        self.access_level = level
 
     def reset(self, system_prompt: Optional[str] = None):
         if system_prompt:
@@ -56,6 +88,16 @@ class Agent:
     def _run_tool(self, call: dict) -> str:
         name = call.get("name", "")
         args = call.get("arguments") or {}
+        risk = classify_risk(name, args)
+
+        if needs_approval(self.access_level, risk):
+            if self.approval_callback:
+                approved = self.approval_callback(name, args, risk)
+                if not approved:
+                    return f"Denied by user (access={self.access_level}, risk={risk})"
+            else:
+                return f"Approval required but no callback (access={self.access_level}, risk={risk})"
+
         fn = getattr(self.tools, name, None)
         if not callable(fn):
             return f"Unknown tool: {name}"
