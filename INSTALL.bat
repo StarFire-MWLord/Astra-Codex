@@ -95,7 +95,7 @@ if exist "dist\Astra-Codex.exe" (
     del /q "dist\Astra-Codex.exe"
 )
 
-pyinstaller --noconfirm --onefile --windowed --name Astra-Codex --add-data "prompts;prompts" --add-data "core;core" --add-data "ui;ui" main.py
+pyinstaller --noconfirm Astra-Codex.spec
 
 if not exist "dist\Astra-Codex.exe" (
     echo Build failed.
