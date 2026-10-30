@@ -19,21 +19,23 @@ echo Looking for Python 3.12...
 echo Looking for Python 3.12... >> "%LOG%"
 py -3.12 --version >nul 2>&1
 if errorlevel 1 (
-    echo Python 3.12 not found. Downloading installer...
-    echo Downloading Python 3.12... >> "%LOG%"
-    powershell -NoProfile -Command "try { Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe' -OutFile 'python-3.12.7-amd64.exe' -UseBasicParsing; Write-Host 'Download ok' } catch { Write-Host $_.Exception.Message; exit 1 }" >> "%LOG%" 2>&1
+    echo Python 3.12 not found. Downloading installer with curl...
+    echo Downloading Python 3.12 with curl... >> "%LOG%"
+    curl -L -o python-3.12.7-amd64.exe https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe >> "%LOG%" 2>&1
     if not exist python-3.12.7-amd64.exe (
-        echo Download failed. Check internet or run as admin.
+        echo Download failed. Check internet.
         echo Download failed. >> "%LOG%"
         type "%LOG%"
         pause
         exit /b 1
     )
-    echo Installing Python 3.12 (this may take a minute)...
+    echo Download finished. Installing Python 3.12...
     echo Installing Python 3.12... >> "%LOG%"
     start /wait python-3.12.7-amd64.exe /quiet InstallAllUsers=1 PrependPath=1 Include_test=0 /log python_install.log
     del python-3.12.7-amd64.exe
-    echo Python installed. Please close this window and run FIX_AND_BUILD.bat again so PATH updates.
+    echo.
+    echo Python 3.12 installed.
+    echo Close this window and run FIX_AND_BUILD.bat again so PATH updates.
     echo Restart required for PATH. >> "%LOG%"
     pause
     exit /b 0
