@@ -4,14 +4,14 @@ import os
 
 
 class LocalLLM:
-    """Thin wrapper around llama-cpp-python. CPU-first for low-VRAM GPUs."""
+    """Thin wrapper around llama-cpp-python. GPU offload for RTX 4060-class cards."""
 
     def __init__(
         self,
         model_path: str | Path,
-        n_ctx: int = 4096,
+        n_ctx: int = 8192,
         n_threads: Optional[int] = None,
-        n_gpu_layers: int = 0,  # 0 = pure CPU (required for GTX 460 era)
+        n_gpu_layers: int = -1,  # -1 = offload all layers to GPU (RTX 4060)
         verbose: bool = False,
     ):
         from llama_cpp import Llama
@@ -28,8 +28,9 @@ class LocalLLM:
             n_threads=threads,
             n_gpu_layers=n_gpu_layers,
             verbose=verbose,
-            chat_format="chatml",  # works for most modern instruct models
+            chat_format="chatml",
         )
+        self.n_gpu_layers = n_gpu_layers
 
     def chat(
         self,
