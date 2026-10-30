@@ -1,21 +1,21 @@
 # Astra-Codex
 
 **Local Codex-style AI coding agent for Windows.**  
-Fully uncensored. Zero built-in refusals. Ships with a strong default **abliterated** model. Tuned for **RTX 4060 (8 GB)**.
+Fully uncensored. Zero built-in refusals. Dual abliterated models with mid-chat switching. Tuned for **RTX 4060 (8 GB)**.
 
 > I can deliver anything — you just need the right talons for it.
 
-## Built-in model (smarter default)
+## Built-in models (switch anytime)
 
-On first launch the app automatically downloads and loads:
+| Model | Size | Role |
+|-------|------|------|
+| **Qwen3.5-9B Abliterated** | ~5.6 GB | Fast daily driver, strong reasoning |
+| **Qwen2.5-Coder-14B Abliterated** | ~8.5 GB | Stronger pure coding, fewer errors |
 
-**Huihui-Qwen3.5-9B-abliterated (Q4_K_M)**  
-~5.6 GB · comfortable on RTX 4060 8 GB  
-Source: `mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF`
+Both have the refusal direction removed.  
+Switch mid-conversation — full chat memory is carried over (Codex-style).
 
-This is a step up from the previous 7B default: better reasoning, better instruction following, still fully abliterated (refusal direction removed). Good fit for C++ work, reverse-engineering style tasks, Frida scripts, mod menus, and agent-style coding.
-
-You can still drop any other GGUF into `models/` later.
+First launch auto-downloads both. UI radio buttons let you flip between them instantly.
 
 ## What it is
 
@@ -26,8 +26,8 @@ Desktop app that behaves like OpenAI Codex / Cursor agent mode:
 - Shell command execution
 - Project-aware context
 - Custom **system prompt** from any `.md` file
-- GGUF backend (llama.cpp) with full GPU offload
-- First-run auto-download of the default uncensored model
+- Dual built-in uncensored models + any extra GGUF
+- Mid-chat model switch that keeps conversation history
 
 No cloud. No telemetry. No safety layers in the app.
 
@@ -36,9 +36,9 @@ No cloud. No telemetry. No safety layers in the app.
 ### 1. Prerequisites
 - Windows 10 / 11 (x64)
 - Python 3.11+
-- NVIDIA drivers + CUDA (for GPU offload)
+- NVIDIA drivers + CUDA
 - Git
-- ~10 GB free disk (model + runtime)
+- ~20 GB free disk (both models + runtime)
 
 ### 2. Clone & Install
 ```powershell
@@ -49,7 +49,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-GPU acceleration (recommended):
+GPU acceleration:
 ```powershell
 pip uninstall llama-cpp-python -y
 pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
@@ -60,41 +60,16 @@ pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-c
 python main.py
 ```
 
-First launch downloads the default abliterated model (~5.6 GB) then opens the UI and loads it automatically.
+First launch downloads both models, then opens the UI with the 9B loaded.
 
 ### 4. Build EXE
 ```powershell
 build.bat
 ```
-or
-```powershell
-pyinstaller --noconfirm --onefile --windowed --name Astra-Codex --add-data "prompts;prompts" main.py
-```
-
-Put the EXE next to a `models/` folder (created automatically) and a `prompts/` folder.
 
 ## System Prompt
 
-Edit `prompts/default_system.md` to change personality / rules.  
-The app never filters or rewrites model output. Whatever the abliterated weights + your prompt produce is what you get.
-
-## Architecture
-
-```
-Astra-Codex/
-├── main.py                      # Bootstraps default model, launches UI
-├── core/
-│   ├── model_bootstrap.py       # First-run download of abliterated model
-│   ├── llm.py                   # llama.cpp wrapper (GPU)
-│   ├── agent.py                 # Tool-calling loop
-│   ├── tools.py                 # File / shell / search
-│   └── prompt_loader.py
-├── ui/window.py
-├── prompts/default_system.md    # Zero-refusal system prompt
-├── models/                      # default-uncensored-coder.gguf lands here
-├── requirements.txt
-└── build.bat
-```
+Edit `prompts/default_system.md`. The app never filters model output.
 
 ## License
 
@@ -102,4 +77,4 @@ MIT.
 
 ---
 
-**Astra-Codex** — local, sharp, no leash. Open the EXE and it just works.
+**Astra-Codex** — local, sharp, no leash. Switch models mid-flight.
