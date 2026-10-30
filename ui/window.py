@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, List
 
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
@@ -11,7 +11,13 @@ from core.llm import LocalLLM, find_gguf_models
 from core.agent import Agent
 from core.tools import ToolBelt
 from core.prompt_loader import PromptLoader
-from core.model_bootstrap import DEFAULT_LOCAL_NAME
+from core.model_bootstrap import (
+    MODELS,
+    DEFAULT_MODEL_ID,
+    list_builtin_models,
+    get_model_by_id,
+    ensure_default_models,
+)
 
 
 class AstraWindow(ctk.CTk):
@@ -31,41 +37,65 @@ class AstraWindow(ctk.CTk):
         self.models_dir = Path("models")
         self.models_dir.mkdir(exist_ok=True)
 
+        # Shared conversation history survives model switches
+        self.shared_history: List[dict] = []
+
         self._build_ui()
         self._refresh_models()
         self._refresh_prompts()
 
-        # Prefer the built-in uncensored model and load it automatically
-        if DEFAULT_LOCAL_NAME in self.model_menu.cget("values"):
-            self.model_var.set(DEFAULT_LOCAL_NAME)
-            self.after(300, self._load_model)
-        elif self.model_var.get() != "(no models)":
-            self.after(300, self._load_model)
+        # Prefer built-in fast model and auto-load
+        self.after(400, self._auto_load_default)
 
     def _build_ui(self):
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
-        side = ctk.CTkFrame(self, width=260, corner_radius=0)
+        side = ctk.CTkFrame(self, width=280, corner_radius=0)
         side.grid(row=0, column=0, sticky="nsw")
         side.grid_propagate(False)
 
         ctk.CTkLabel(side, text="Astra-Codex", font=ctk.CTkFont(size=18, weight="bold")).pack(
             pady=(16, 4), padx=12, anchor="w"
         )
-        ctk.CTkLabel(side, text="local · uncensored · sharp", text_color="gray").pack(
+        ctk.CTkLabel(side, text="local · uncensored · dual model", text_color="gray").pack(
             padx=12, anchor="w"
         )
 
-        ctk.CTkLabel(side, text="Model").pack(pady=(18, 2), padx=12, anchor="w")
+        # --- Built-in model switcher (Codex-style) ---
+        ctk.CTkLabel(side, text="Built-in Models (switch anytime)").pack(
+            pady=(18, 2), padx=12, anchor="w"
+        )
+
+        self.builtin_var = ctk.StringVar(value=DEFAULT_MODEL_ID)
+        for m in MODELS:
+            rb = ctk.CTkRadioButton(
+                side,
+                text=m["display"],
+                variable=self.builtin_var,
+                value=m["id"],
+                command=self._on_builtin_switch,
+            )
+            rb.pack(anchor="w", padx=16, pady=2)
+
+        ctk.CTkLabel(
+            side,
+            text="Switch mid-chat keeps full memory",
+            text_color="gray",
+            font=ctk.CTkFont(size=11),
+        ).pack(padx=12, pady=(2, 8), anchor="w")
+
+        # --- Any GGUF fallback ---
+        ctk.CTkLabel(side, text="Or any GGUF in models/").pack(pady=(8, 2), padx=12, anchor="w")
         self.model_var = ctk.StringVar(value="(no models)")
         self.model_menu = ctk.CTkOptionMenu(side, variable=self.model_var, values=["(no models)"])
         self.model_menu.pack(fill="x", padx=12)
 
-        ctk.CTkButton(side, text="Load Model", command=self._load_model).pack(
+        ctk.CTkButton(side, text="Load Selected GGUF", command=self._load_gguf).pack(
             fill="x", padx=12, pady=(8, 0)
         )
 
+        # --- System prompt ---
         ctk.CTkLabel(side, text="System Prompt (.md)").pack(pady=(18, 2), padx=12, anchor="w")
         self.prompt_var = ctk.StringVar(value="default_system")
         self.prompt_menu = ctk.CTkOptionMenu(
@@ -80,8 +110,9 @@ class AstraWindow(ctk.CTk):
             fill="x", padx=12, pady=(6, 0)
         )
 
+        # --- Project root ---
         ctk.CTkLabel(side, text="Project Root").pack(pady=(18, 2), padx=12, anchor="w")
-        self.root_label = ctk.CTkLabel(side, text=str(self.project_root), wraplength=230, anchor="w")
+        self.root_label = ctk.CTkLabel(side, text=str(self.project_root), wraplength=250, anchor="w")
         self.root_label.pack(fill="x", padx=12)
         ctk.CTkButton(side, text="Choose Folder", command=self._choose_root).pack(
             fill="x", padx=12, pady=(6, 0)
@@ -90,6 +121,7 @@ class AstraWindow(ctk.CTk):
         self.status = ctk.CTkLabel(side, text="No model loaded", text_color="orange")
         self.status.pack(side="bottom", pady=16, padx=12, anchor="w")
 
+        # --- Chat area ---
         main = ctk.CTkFrame(self)
         main.grid(row=0, column=1, sticky="nsew", padx=8, pady=8)
         main.grid_rowconfigure(0, weight=1)
@@ -100,8 +132,9 @@ class AstraWindow(ctk.CTk):
         self.chat.insert(
             "end",
             "Astra-Codex online.\n"
-            "Built-in model: Qwen2.5-Coder-7B abliterated (zero refusal).\n"
-            "First launch downloads it automatically (~4.7 GB).\n\n",
+            "Two built-in abliterated models — switch anytime, memory stays.\n"
+            "• Qwen3.5-9B  → fast daily driver\n"
+            "• Qwen2.5-Coder-14B → stronger code, fewer errors\n\n",
         )
         self.chat.configure(state="disabled")
 
@@ -115,6 +148,108 @@ class AstraWindow(ctk.CTk):
 
         ctk.CTkButton(bottom, text="Send", width=100, command=self._send).grid(row=0, column=1)
 
+    # ------------------------------------------------------------------
+    # Model loading / switching
+    # ------------------------------------------------------------------
+
+    def _auto_load_default(self):
+        """First launch: ensure models exist, then load the fast 9B."""
+        self.status.configure(text="Checking models…", text_color="yellow")
+
+        def work():
+            try:
+                ensure_default_models(self.models_dir)
+                self.after(0, self._refresh_models)
+                self.after(0, lambda: self._load_builtin(DEFAULT_MODEL_ID))
+            except Exception as e:
+                self.after(0, lambda: self.status.configure(
+                    text=f"Bootstrap: {e}", text_color="orange"
+                ))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_builtin_switch(self):
+        mid = self.builtin_var.get()
+        self._load_builtin(mid)
+
+    def _load_builtin(self, model_id: str):
+        info = get_model_by_id(model_id)
+        if not info:
+            return
+
+        path = self.models_dir / info["local_name"]
+        if not path.exists():
+            # try original filename
+            path = self.models_dir / info["file"]
+        if not path.exists():
+            self.status.configure(text="Model file missing — downloading…", text_color="yellow")
+            def dl():
+                try:
+                    from core.model_bootstrap import ensure_model
+                    ensure_model(info, self.models_dir)
+                    self.after(0, lambda: self._load_builtin(model_id))
+                except Exception as e:
+                    self.after(0, lambda: messagebox.showerror("Download failed", str(e)))
+            threading.Thread(target=dl, daemon=True).start()
+            return
+
+        self._swap_model(path, info["display"])
+
+    def _load_gguf(self):
+        name = self.model_var.get()
+        if name == "(no models)":
+            messagebox.showinfo("No models", "Put a .gguf file in the models/ folder.")
+            return
+        path = self.models_dir / name
+        self._swap_model(path, name)
+
+    def _swap_model(self, path: Path, display_name: str):
+        """Load new model while preserving conversation history."""
+        self.status.configure(text=f"Loading {display_name}…", text_color="yellow")
+        self.update_idletasks()
+
+        # Snapshot current history (skip system message)
+        old_history = []
+        if self.agent and len(self.agent.history) > 1:
+            old_history = [m for m in self.agent.history if m["role"] != "system"]
+
+        def work():
+            try:
+                # 14B may need fewer GPU layers on 8GB; 9B can take all
+                n_gpu = -1
+                if "14B" in display_name or "14b" in display_name.lower():
+                    n_gpu = 28  # leave a little headroom
+
+                llm = LocalLLM(path, n_ctx=8192, n_gpu_layers=n_gpu)
+                sys_prompt = self.prompt_loader.load(self.prompt_var.get())
+                tools = ToolBelt(self.project_root)
+                agent = Agent(llm, tools, sys_prompt)
+
+                # Restore conversation memory
+                if old_history:
+                    agent.history.extend(old_history)
+
+                self.llm = llm
+                self.agent = agent
+
+                self.after(0, lambda: self.status.configure(
+                    text=f"Loaded: {display_name}", text_color="lightgreen"
+                ))
+                self.after(0, lambda: self._append(
+                    "system",
+                    f"Switched to {display_name}\n"
+                    f"Conversation memory carried over ({len(old_history)} messages).",
+                ))
+            except Exception as e:
+                self.after(0, lambda: self.status.configure(text=f"Error: {e}", text_color="red"))
+                self.after(0, lambda: messagebox.showerror("Load failed", str(e)))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    # ------------------------------------------------------------------
+    # UI helpers
+    # ------------------------------------------------------------------
+
     def _append(self, role: str, text: str):
         self.chat.configure(state="normal")
         self.chat.insert("end", f"\n[{role}]\n{text}\n")
@@ -125,11 +260,7 @@ class AstraWindow(ctk.CTk):
         models = find_gguf_models(self.models_dir)
         names = [m.name for m in models] or ["(no models)"]
         self.model_menu.configure(values=names)
-        # Prefer built-in default
-        if DEFAULT_LOCAL_NAME in names:
-            self.model_var.set(DEFAULT_LOCAL_NAME)
-        else:
-            self.model_var.set(names[0])
+        self.model_var.set(names[0])
 
     def _refresh_prompts(self):
         names = self.prompt_loader.list_prompts() or ["default_system"]
@@ -139,40 +270,15 @@ class AstraWindow(ctk.CTk):
         else:
             self.prompt_var.set(names[0])
 
-    def _load_model(self):
-        name = self.model_var.get()
-        if name == "(no models)":
-            messagebox.showinfo("No models", "Put a .gguf file in the models/ folder.")
-            return
-        path = self.models_dir / name
-        self.status.configure(text="Loading…", text_color="yellow")
-        self.update_idletasks()
-
-        def work():
-            try:
-                self.llm = LocalLLM(path, n_ctx=8192, n_gpu_layers=-1)
-                sys_prompt = self.prompt_loader.load(self.prompt_var.get())
-                tools = ToolBelt(self.project_root)
-                self.agent = Agent(self.llm, tools, sys_prompt)
-                self.after(0, lambda: self.status.configure(
-                    text=f"Loaded: {name} (GPU)", text_color="lightgreen"
-                ))
-                self.after(0, lambda: self._append(
-                    "system",
-                    f"Model loaded: {name}\nUncensored abliterated weights — zero built-in refusals.",
-                ))
-            except Exception as e:
-                self.after(0, lambda: self.status.configure(text=f"Error: {e}", text_color="red"))
-                self.after(0, lambda: messagebox.showerror("Load failed", str(e)))
-
-        threading.Thread(target=work, daemon=True).start()
-
     def _on_prompt_change(self, *_):
         if not self.agent:
             return
         sys_prompt = self.prompt_loader.load(self.prompt_var.get())
-        self.agent.reset(sys_prompt)
-        self._append("system", f"System prompt switched to: {self.prompt_var.get()}")
+        # Keep history, only replace system message
+        self.agent.system = sys_prompt.strip() + "\n\n" + self.agent.system.split("You have these tools")[-1] if "You have these tools" in self.agent.system else sys_prompt
+        if self.agent.history and self.agent.history[0]["role"] == "system":
+            self.agent.history[0] = {"role": "system", "content": self.agent.system}
+        self._append("system", f"System prompt → {self.prompt_var.get()}")
 
     def _open_prompts(self):
         import os
@@ -188,7 +294,7 @@ class AstraWindow(ctk.CTk):
 
     def _send(self):
         if not self.agent:
-            messagebox.showinfo("No model", "Load a GGUF model first.")
+            messagebox.showinfo("No model", "Load a model first.")
             return
         text = self.input.get("1.0", "end").strip()
         if not text:
