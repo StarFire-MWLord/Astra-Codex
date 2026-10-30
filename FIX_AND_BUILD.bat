@@ -9,16 +9,23 @@ echo   Forces Python 3.12 + CUDA llama + clean EXE
 echo ============================================
 echo.
 
-:: Find Python 3.12
+:: Find or install Python 3.12
 echo Looking for Python 3.12...
 py -3.12 --version >nul 2>&1
 if errorlevel 1 (
-    echo Python 3.12 not found.
-    echo Install it from https://www.python.org/downloads/release/python-3120/
-    echo Check "Add python.exe to PATH" during install.
-    echo Then run this bat again.
-    pause
-    exit /b 1
+    echo Python 3.12 not found. Downloading installer...
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe' -OutFile 'python-3.12.7-amd64.exe'"
+    if not exist python-3.12.7-amd64.exe (
+        echo Download failed. Check internet.
+        pause
+        exit /b 1
+    )
+    echo Installing Python 3.12 silently (adds to PATH)...
+    start /wait python-3.12.7-amd64.exe /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
+    del python-3.12.7-amd64.exe
+    echo Restarting this script so PATH updates...
+    start "" cmd /c "%~f0"
+    exit /b 0
 )
 echo     Found Python 3.12
 
@@ -70,7 +77,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-:: Pull latest (ignore untracked for now)
+:: Pull latest
 echo.
 echo Pulling latest from repo...
 git stash --include-untracked >nul 2>&1
@@ -100,7 +107,7 @@ if not exist "dist\prompts" mkdir "dist\prompts"
 xcopy /y /q "models\*.gguf" "dist\models\" >nul 2>&1
 xcopy /y /q /e "prompts\*" "dist\prompts\" >nul 2>&1
 
-:: Shortcut (fixed escaping)
+:: Shortcut
 echo.
 echo Creating desktop shortcut...
 set "EXE=%CD%\dist\Astra-Codex.exe"
