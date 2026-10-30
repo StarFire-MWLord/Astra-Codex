@@ -1,37 +1,35 @@
 # Astra-Codex
 
 **Local Codex-style AI coding agent for Windows.**  
-Fully uncensored. Zero built-in refusals. Custom system prompt via `.md` file. Tuned for **RTX 4060 (8 GB)** and similar cards.
+Fully uncensored. Zero built-in refusals. Ships with a default **abliterated** coding model. Tuned for **RTX 4060 (8 GB)**.
 
 > I can deliver anything — you just need the right talons for it.
 
+## Built-in model (zero refusal)
+
+On first launch the app automatically downloads and loads:
+
+**Qwen2.5-Coder-7B-Instruct-abliterated (Q4_K_M)**  
+~4.7 GB · fits RTX 4060 8 GB with room for context  
+Source: `bartowski/Qwen2.5-Coder-7B-Instruct-abliterated-GGUF`
+
+Abliteration removes the refusal direction from the weights. Combined with the default system prompt in `prompts/default_system.md`, the agent does not refuse, moralize, or soft-block. Open the EXE → model loads → talk.
+
+You can still swap any other GGUF into `models/` later.
+
 ## What it is
 
-Astra-Codex is a desktop application that behaves like OpenAI Codex / Cursor agent mode:
+Desktop app that behaves like OpenAI Codex / Cursor agent mode:
 
 - Chat interface with streaming replies
 - File read / write / list / search tools
 - Shell command execution
 - Project-aware context
-- Custom **system prompt** loaded from any `.md` file (drop your own uncensored prompt)
-- GGUF model support (llama.cpp backend)
-- GPU offload for RTX 4060-class cards + CPU fallback
+- Custom **system prompt** from any `.md` file
+- GGUF backend (llama.cpp) with full GPU offload
+- First-run auto-download of the default uncensored model
 
-No cloud. No telemetry. No safety layers baked into the app. The model + the system prompt you supply decide the behavior.
-
-## Hardware — RTX 4060 (8 GB)
-
-You have real headroom. Recommended models:
-
-| Model | Quant | Approx size | Notes |
-|-------|-------|-------------|-------|
-| Qwen2.5-Coder-7B / 14B | Q4_K_M / Q5_K_M | 4–9 GB | Strong coding |
-| Qwen3 / Qwen3.5 8–14B abliterated | Q4_K_M | 5–9 GB | Uncensored sweet spot |
-| Llama-3.1-8B abliterated | Q4_K_M / Q5_K_M | 4.5–6 GB | Solid all-rounder |
-| DeepSeek-Coder / CodeLlama 7B–13B | Q4/Q5 | 4–8 GB | Code-focused |
-| Any 7–14B abliterated GGUF | Q4_K_M | fits 8 GB | Zero-refusal options |
-
-Leave a little VRAM free for context (KV cache). 8k–16k context is comfortable on 8 GB with Q4 models.
+No cloud. No telemetry. No safety layers in the app.
 
 ## Quick Start
 
@@ -40,7 +38,7 @@ Leave a little VRAM free for context (KV cache). 8k–16k context is comfortable
 - Python 3.11+
 - NVIDIA drivers + CUDA (for GPU offload)
 - Git
-- ~15 GB free disk for models
+- ~10 GB free disk (model + runtime)
 
 ### 2. Clone & Install
 ```powershell
@@ -51,86 +49,57 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-For GPU acceleration install the CUDA build of llama-cpp-python (example):
+GPU acceleration (recommended):
 ```powershell
 pip uninstall llama-cpp-python -y
 pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
 ```
 
-### 3. Get a GGUF model
-Drop any GGUF (preferably abliterated / uncensored) into `models/`.
-
-Good starting points on Hugging Face:
-- Qwen2.5-Coder-7B-Instruct GGUF
-- Search "abliterated GGUF" or "uncensored GGUF" for 7–14B models
-
-### 4. Drop your system prompt
-Edit or replace `prompts/default_system.md` with whatever personality / rules you want. The entire contents of that file become the system message. No filters are applied by the app.
-
-### 5. Run
+### 3. Run
 ```powershell
 python main.py
 ```
 
-Or build a standalone EXE (see below).
+First launch downloads the default abliterated model (~4.7 GB) then opens the UI and loads it automatically.
 
-## Building the EXE
-
+### 4. Build EXE
 ```powershell
-pip install pyinstaller
+build.bat
+```
+or
+```powershell
 pyinstaller --noconfirm --onefile --windowed --name Astra-Codex --add-data "prompts;prompts" main.py
 ```
 
-Or just run `build.bat`.
+Put the EXE next to a `models/` folder (created automatically) and a `prompts/` folder.
 
-The resulting `dist/Astra-Codex.exe` is portable. Place a `models/` folder and `prompts/` folder next to the EXE.
+## System Prompt
+
+Edit `prompts/default_system.md` to change personality / rules.  
+The app never filters or rewrites model output. Whatever the abliterated weights + your prompt produce is what you get.
 
 ## Architecture
 
 ```
 Astra-Codex/
-├── main.py                 # Entry point + UI
+├── main.py                      # Bootstraps default model, launches UI
 ├── core/
-│   ├── llm.py              # llama-cpp-python wrapper (GPU + CPU)
-│   ├── agent.py            # Tool-calling agent loop
-│   ├── tools.py            # File, shell, search tools
-│   └── prompt_loader.py    # Loads .md system prompts
-├── ui/
-│   └── window.py           # CustomTkinter desktop UI
-├── prompts/
-│   └── default_system.md   # Your uncensored system prompt lives here
-├── models/                 # Drop GGUF files here
+│   ├── model_bootstrap.py       # First-run download of abliterated coder
+│   ├── llm.py                   # llama.cpp wrapper (GPU)
+│   ├── agent.py                 # Tool-calling loop
+│   ├── tools.py                 # File / shell / search
+│   └── prompt_loader.py
+├── ui/window.py
+├── prompts/default_system.md    # Zero-refusal system prompt
+├── models/                      # default-uncensored-coder.gguf lands here
 ├── requirements.txt
-└── build.bat               # One-click EXE build
+└── build.bat
 ```
-
-## System Prompt / Uncensored Mode
-
-There is **no** hard-coded refusal logic in Astra-Codex.
-
-Whatever you put in `prompts/*.md` is injected as the system message.  
-Want zero refusals? Write a system prompt that says so.  
-Want a specific persona, coding style, or jailbreak? Drop the `.md` and select it in the UI.
-
-The app never rewrites, filters, or second-guesses the model output.
-
-## Features (Codex parity targets)
-
-- [x] Streaming chat
-- [x] Custom system prompt from .md
-- [x] File read / write / list / recursive search
-- [x] Shell tool
-- [x] Model selector (GGUF folder scan)
-- [x] GPU offload (RTX 4060) + CPU fallback
-- [x] Project root awareness
-- [ ] Multi-file agentic edits (in progress)
-- [ ] Diff preview UI
-- [ ] Git integration
 
 ## License
 
-MIT. Do whatever you want with it.
+MIT.
 
 ---
 
-**Astra-Codex** — local, sharp, no leash.
+**Astra-Codex** — local, sharp, no leash. Open the EXE and it just works.
