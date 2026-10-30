@@ -1,42 +1,56 @@
-"""Bootstrap the default uncensored model on first run."""
+"""Bootstrap the built-in uncensored models on first run."""
 
 from pathlib import Path
 import urllib.request
 import sys
+from typing import List, Dict
 
-# Stronger default for C++ / reverse / agent work that still fits RTX 4060 8GB
-# ~5.6 GB Q4_K_M, abliterated (refusal direction removed)
-DEFAULT_REPO = "mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF"
-DEFAULT_FILE = "Huihui-Qwen3.5-9B-abliterated.Q4_K_M.gguf"
-DEFAULT_URL = (
-    f"https://huggingface.co/{DEFAULT_REPO}/resolve/main/{DEFAULT_FILE}"
-)
-DEFAULT_LOCAL_NAME = "default-uncensored-coder.gguf"
+# Two fully abliterated models for RTX 4060 8GB
+# Both have refusal direction removed.
+MODELS: List[Dict] = [
+    {
+        "id": "qwen35-9b",
+        "display": "Qwen3.5-9B Abliterated (fast)",
+        "local_name": "qwen35-9b-abliterated.gguf",
+        "repo": "mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF",
+        "file": "Huihui-Qwen3.5-9B-abliterated.Q4_K_M.gguf",
+        "size_gb": 5.6,
+        "note": "Best daily driver — fast + strong reasoning",
+    },
+    {
+        "id": "coder-14b",
+        "display": "Qwen2.5-Coder-14B Abliterated (stronger code)",
+        "local_name": "qwen25-coder-14b-abliterated.gguf",
+        "repo": "bartowski/Qwen2.5-Coder-14B-Instruct-abliterated-GGUF",
+        "file": "Qwen2.5-Coder-14B-Instruct-abliterated-Q4_K_M.gguf",
+        "size_gb": 8.5,
+        "note": "Stronger pure coding — fewer errors, slower",
+    },
+]
+
+DEFAULT_MODEL_ID = "qwen35-9b"
 
 
-def ensure_default_model(models_dir: str | Path = "models") -> Path:
-    """
-    Ensure the built-in uncensored model exists.
-    Downloads ~5.6 GB Q4_K_M Huihui Qwen3.5-9B abliterated on first run.
-    Noticeably smarter than 7B while staying comfortable on 8 GB VRAM.
-    """
-    models_dir = Path(models_dir)
-    models_dir.mkdir(parents=True, exist_ok=True)
-    target = models_dir / DEFAULT_LOCAL_NAME
+def _url(repo: str, file: str) -> str:
+    return f"https://huggingface.co/{repo}/resolve/main/{file}"
 
+
+def ensure_model(model: Dict, models_dir: Path) -> Path:
+    """Download one model if missing. Returns local path."""
+    target = models_dir / model["local_name"]
     if target.exists() and target.stat().st_size > 1_000_000_000:
         return target
 
-    # Also accept the original filename if user already dropped it
-    alt = models_dir / DEFAULT_FILE
+    # Accept original filename too
+    alt = models_dir / model["file"]
     if alt.exists() and alt.stat().st_size > 1_000_000_000:
         return alt
 
-    print(f"[Astra-Codex] First run — downloading default uncensored model")
-    print(f"  {DEFAULT_FILE}")
-    print(f"  (~5.6 GB, Huihui Qwen3.5-9B abliterated — stronger coding/reasoning)")
-    print(f"  Source: {DEFAULT_URL}")
-    print("  This only happens once. Leave this window open.")
+    url = _url(model["repo"], model["file"])
+    print(f"[Astra-Codex] Downloading {model['display']}")
+    print(f"  {model['file']} (~{model['size_gb']} GB)")
+    print(f"  {url}")
+    print("  Leave this window open.")
 
     tmp = target.with_suffix(".gguf.partial")
 
@@ -50,17 +64,40 @@ def ensure_default_model(models_dir: str | Path = "models") -> Path:
             sys.stdout.flush()
 
     try:
-        urllib.request.urlretrieve(DEFAULT_URL, tmp, reporthook=_progress)
+        urllib.request.urlretrieve(url, tmp, reporthook=_progress)
         print()
         tmp.rename(target)
-        print(f"[Astra-Codex] Model ready: {target}")
+        print(f"[Astra-Codex] Ready: {target.name}")
         return target
     except Exception as e:
         if tmp.exists():
             tmp.unlink(missing_ok=True)
         raise RuntimeError(
-            f"Failed to download default model.\n"
-            f"Manual fix: download\n  {DEFAULT_URL}\n"
-            f"and place it in the models/ folder as {DEFAULT_LOCAL_NAME}\n"
-            f"Error: {e}"
+            f"Failed to download {model['display']}.\n"
+            f"Manual: {url}\n"
+            f"Place as {model['local_name']} in models/\nError: {e}"
         ) from e
+
+
+def ensure_default_models(models_dir: str | Path = "models") -> List[Path]:
+    """Ensure both built-in models exist. Returns list of local paths."""
+    models_dir = Path(models_dir)
+    models_dir.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for m in MODELS:
+        try:
+            paths.append(ensure_model(m, models_dir))
+        except Exception as e:
+            print(f"[Astra-Codex] Warning: could not get {m['display']}: {e}")
+    return paths
+
+
+def list_builtin_models() -> List[Dict]:
+    return MODELS
+
+
+def get_model_by_id(model_id: str) -> Dict | None:
+    for m in MODELS:
+        if m["id"] == model_id:
+            return m
+    return None
