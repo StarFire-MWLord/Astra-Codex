@@ -11,6 +11,7 @@ from core.llm import LocalLLM, find_gguf_models
 from core.agent import Agent
 from core.tools import ToolBelt
 from core.prompt_loader import PromptLoader
+from core.model_bootstrap import DEFAULT_LOCAL_NAME
 
 
 class AstraWindow(ctk.CTk):
@@ -33,6 +34,13 @@ class AstraWindow(ctk.CTk):
         self._build_ui()
         self._refresh_models()
         self._refresh_prompts()
+
+        # Prefer the built-in uncensored model and load it automatically
+        if DEFAULT_LOCAL_NAME in self.model_menu.cget("values"):
+            self.model_var.set(DEFAULT_LOCAL_NAME)
+            self.after(300, self._load_model)
+        elif self.model_var.get() != "(no models)":
+            self.after(300, self._load_model)
 
     def _build_ui(self):
         self.grid_columnconfigure(1, weight=1)
@@ -89,7 +97,12 @@ class AstraWindow(ctk.CTk):
 
         self.chat = ctk.CTkTextbox(main, wrap="word", font=ctk.CTkFont(size=13))
         self.chat.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
-        self.chat.insert("end", "Astra-Codex online.\nDrop a GGUF into models/, load it, then talk.\n\n")
+        self.chat.insert(
+            "end",
+            "Astra-Codex online.\n"
+            "Built-in model: Qwen2.5-Coder-7B abliterated (zero refusal).\n"
+            "First launch downloads it automatically (~4.7 GB).\n\n",
+        )
         self.chat.configure(state="disabled")
 
         bottom = ctk.CTkFrame(main)
@@ -112,7 +125,11 @@ class AstraWindow(ctk.CTk):
         models = find_gguf_models(self.models_dir)
         names = [m.name for m in models] or ["(no models)"]
         self.model_menu.configure(values=names)
-        self.model_var.set(names[0])
+        # Prefer built-in default
+        if DEFAULT_LOCAL_NAME in names:
+            self.model_var.set(DEFAULT_LOCAL_NAME)
+        else:
+            self.model_var.set(names[0])
 
     def _refresh_prompts(self):
         names = self.prompt_loader.list_prompts() or ["default_system"]
@@ -133,7 +150,6 @@ class AstraWindow(ctk.CTk):
 
         def work():
             try:
-                # -1 = offload all layers to GPU (RTX 4060 8GB)
                 self.llm = LocalLLM(path, n_ctx=8192, n_gpu_layers=-1)
                 sys_prompt = self.prompt_loader.load(self.prompt_var.get())
                 tools = ToolBelt(self.project_root)
@@ -141,7 +157,10 @@ class AstraWindow(ctk.CTk):
                 self.after(0, lambda: self.status.configure(
                     text=f"Loaded: {name} (GPU)", text_color="lightgreen"
                 ))
-                self.after(0, lambda: self._append("system", f"Model loaded: {name} (GPU offload)"))
+                self.after(0, lambda: self._append(
+                    "system",
+                    f"Model loaded: {name}\nUncensored abliterated weights — zero built-in refusals.",
+                ))
             except Exception as e:
                 self.after(0, lambda: self.status.configure(text=f"Error: {e}", text_color="red"))
                 self.after(0, lambda: messagebox.showerror("Load failed", str(e)))
