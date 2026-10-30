@@ -38,7 +38,6 @@ class AstraWindow(ctk.CTk):
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
-        # Sidebar
         side = ctk.CTkFrame(self, width=260, corner_radius=0)
         side.grid(row=0, column=0, sticky="nsw")
         side.grid_propagate(False)
@@ -83,7 +82,6 @@ class AstraWindow(ctk.CTk):
         self.status = ctk.CTkLabel(side, text="No model loaded", text_color="orange")
         self.status.pack(side="bottom", pady=16, padx=12, anchor="w")
 
-        # Main chat area
         main = ctk.CTkFrame(self)
         main.grid(row=0, column=1, sticky="nsew", padx=8, pady=8)
         main.grid_rowconfigure(0, weight=1)
@@ -135,15 +133,15 @@ class AstraWindow(ctk.CTk):
 
         def work():
             try:
-                # n_gpu_layers=0 forces CPU — required for GTX 460 class hardware
-                self.llm = LocalLLM(path, n_ctx=4096, n_gpu_layers=0)
+                # -1 = offload all layers to GPU (RTX 4060 8GB)
+                self.llm = LocalLLM(path, n_ctx=8192, n_gpu_layers=-1)
                 sys_prompt = self.prompt_loader.load(self.prompt_var.get())
                 tools = ToolBelt(self.project_root)
                 self.agent = Agent(self.llm, tools, sys_prompt)
                 self.after(0, lambda: self.status.configure(
-                    text=f"Loaded: {name} (CPU)", text_color="lightgreen"
+                    text=f"Loaded: {name} (GPU)", text_color="lightgreen"
                 ))
-                self.after(0, lambda: self._append("system", f"Model loaded: {name}"))
+                self.after(0, lambda: self._append("system", f"Model loaded: {name} (GPU offload)"))
             except Exception as e:
                 self.after(0, lambda: self.status.configure(text=f"Error: {e}", text_color="red"))
                 self.after(0, lambda: messagebox.showerror("Load failed", str(e)))
@@ -184,7 +182,6 @@ class AstraWindow(ctk.CTk):
             try:
                 for token in self.agent.run(text, stream=True):
                     buf.append(token)
-                    # live update every chunk
                     chunk = "".join(buf)
                     self.after(0, lambda c=chunk: self._set_assistant(c))
             except Exception as e:
@@ -194,15 +191,11 @@ class AstraWindow(ctk.CTk):
         threading.Thread(target=work, daemon=True).start()
 
     def _set_assistant(self, text: str):
-        # Replace the last assistant block (simple approach)
         self.chat.configure(state="normal")
         content = self.chat.get("1.0", "end")
-        # find last [astra] and rewrite from there
         idx = content.rfind("[astra]")
         if idx != -1:
-            # convert char index roughly by deleting from mark — keep simple:
             self.chat.delete("1.0", "end")
-            # rebuild without last astra, then re-add
             head = content[:idx]
             self.chat.insert("end", head)
             self.chat.insert("end", f"[astra]\n{text}\n")
