@@ -116,7 +116,7 @@ xcopy /y /q /e "prompts\*" "dist\prompts\" >nul 2>&1
 :: ------------------------------------------------
 echo [7/7] Desktop shortcut...
 set "EXE=%CD%\dist\Astra-Codex.exe"
-set "DESKTOP=%USERPROFILE%\Desktop"
+set "DESKTOP=C:\Users\Administrator\Desktop"
 
 powershell -NoProfile -Command ^
   "$ws = New-Object -ComObject WScript.Shell; ^

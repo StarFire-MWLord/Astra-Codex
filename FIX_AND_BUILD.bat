@@ -144,7 +144,7 @@ echo.
 echo Creating desktop shortcut...
 echo Shortcut... >> "%LOG%"
 set "EXE=%CD%\dist\Astra-Codex.exe"
-set "DESKTOP=%USERPROFILE%\Desktop"
+set "DESKTOP=C:\Users\Administrator\Desktop"
 powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%DESKTOP%\Astra-Codex.lnk'); $s.TargetPath = '%EXE%'; $s.WorkingDirectory = '%CD%\dist'; $s.Description = 'Astra-Codex'; $s.Save()" >> "%LOG%" 2>&1
 
 echo.
