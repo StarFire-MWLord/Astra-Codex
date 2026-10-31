@@ -43,6 +43,26 @@ if errorlevel 1 (
 echo     Found Python 3.12
 echo Found Python 3.12 >> "%LOG%"
 
+:: Ensure Visual C++ Redistributable (required by llama.dll)
+echo.
+echo Checking Visual C++ Redistributable...
+echo Checking VC++ redist... >> "%LOG%"
+reg query "HKLM\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" >nul 2>&1
+if errorlevel 1 (
+    echo VC++ redist missing. Downloading and installing...
+    echo Installing VC++ redist... >> "%LOG%"
+    curl -L -o vc_redist.x64.exe https://aka.ms/vs/17/release/vc_redist.x64.exe >> "%LOG%" 2>&1
+    if exist vc_redist.x64.exe (
+        start /wait vc_redist.x64.exe /install /quiet /norestart
+        del vc_redist.x64.exe
+        echo VC++ redist installed.
+    ) else (
+        echo Download failed. You may need to install vc_redist.x64 manually.
+    )
+) else (
+    echo VC++ redist already present.
+)
+
 :: Kill old venv
 echo.
 echo Removing old .venv...
