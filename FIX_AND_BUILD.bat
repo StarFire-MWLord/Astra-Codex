@@ -97,16 +97,25 @@ echo Installing requirements...
 echo Installing requirements... >> "%LOG%"
 pip install -r requirements.txt --quiet >> "%LOG%" 2>&1
 
-:: CUDA llama-cpp-python
+:: Force clean CUDA llama-cpp-python
 echo.
-echo Installing CUDA llama-cpp-python...
+echo Installing CUDA llama-cpp-python (clean)...
 echo Installing llama-cpp-python CUDA... >> "%LOG%"
 pip uninstall llama-cpp-python -y >nul 2>&1
-pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124 --quiet >> "%LOG%" 2>&1
-if errorlevel 1 (
-    echo CUDA wheel failed. Falling back to CPU.
-    echo CUDA failed, CPU fallback. >> "%LOG%"
-    pip install llama-cpp-python --quiet >> "%LOG%" 2>&1
+pip cache purge >nul 2>&1
+pip install --force-reinstall --no-cache-dir llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124 >> "%LOG%" 2>&1
+
+:: Check if DLL actually exists
+echo.
+echo Checking for llama.dll...
+echo Checking DLL... >> "%LOG%"
+if exist ".venv\Lib\site-packages\llama_cpp\lib\llama.dll" (
+    echo llama.dll found.
+    echo llama.dll found. >> "%LOG%"
+) else (
+    echo llama.dll missing after CUDA install.
+    echo llama.dll missing. >> "%LOG%"
+    dir /s .venv\Lib\site-packages\llama_cpp\lib >> "%LOG%" 2>&1
 )
 
 :: Test the import
@@ -115,11 +124,20 @@ echo Testing llama_cpp import...
 echo Testing import... >> "%LOG%"
 python -c "from llama_cpp import Llama; print('llama_cpp loads clean')" >> "%LOG%" 2>&1
 if errorlevel 1 (
-    echo Import failed. DLL problem remains.
-    echo Import failed. >> "%LOG%"
-    type "%LOG%"
-    pause
-    exit /b 1
+    echo CUDA import failed. Falling back to CPU wheel...
+    echo CUDA import failed, installing CPU... >> "%LOG%"
+    pip uninstall llama-cpp-python -y >nul 2>&1
+    pip install --force-reinstall --no-cache-dir llama-cpp-python >> "%LOG%" 2>&1
+    echo Retesting import...
+    python -c "from llama_cpp import Llama; print('llama_cpp loads clean')" >> "%LOG%" 2>&1
+    if errorlevel 1 (
+        echo Import failed even on CPU. DLL problem remains.
+        echo Import failed. >> "%LOG%"
+        dir /s .venv\Lib\site-packages\llama_cpp\lib >> "%LOG%" 2>&1
+        type "%LOG%"
+        pause
+        exit /b 1
+    )
 )
 echo llama_cpp loads clean
 
