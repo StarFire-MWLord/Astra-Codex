@@ -1,10 +1,8 @@
-"""Runtime hook so llama-cpp finds its libs inside the PyInstaller bundle.
-Temp folder is forced next to the EXE."""
+"""Runtime hook so llama-cpp finds its libs."""
 import os
 import sys
 
 if getattr(sys, 'frozen', False):
-    # Running as EXE — temp lives next to the EXE
     base = sys._MEIPASS
     llama_lib = os.path.join(base, 'llama_cpp', 'lib')
     if os.path.isdir(llama_lib):
